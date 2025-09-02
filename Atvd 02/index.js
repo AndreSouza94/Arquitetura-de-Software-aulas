@@ -1,4 +1,30 @@
 "use strict";
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
+var __assign = (this && this.__assign) || function () {
+    __assign = Object.assign || function(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p))
+                t[p] = s[p];
+        }
+        return t;
+    };
+    return __assign.apply(this, arguments);
+};
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -38,74 +64,214 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 Object.defineProperty(exports, "__esModule", { value: true });
 var crypto = require("crypto");
 var readline = require("readline");
-// 2. Função para criar o identificador único (hash)
-function criarIdentificador(dados) {
-    var dadosParaHash = "".concat(dados.cpf, ":").concat(dados.email, ":").concat(dados.celular);
-    // Usamos SHA-256 para criar um hash seguro e consistente
-    return crypto.createHash('sha256').update(dadosParaHash).digest('hex');
-}
-// 4. Classe da Fila
-var Fila = /** @class */ (function () {
-    function Fila() {
-        this.items = [];
+// 2. Enum para o tipo de sistema
+var TipoSistema;
+(function (TipoSistema) {
+    TipoSistema[TipoSistema["Simples"] = 0] = "Simples";
+    TipoSistema[TipoSistema["ClinicaMedica"] = 1] = "ClinicaMedica";
+})(TipoSistema || (TipoSistema = {}));
+// 3. Classe Base Abstrata para o Sistema de Filas
+var SistemaDeFilaBase = /** @class */ (function () {
+    function SistemaDeFilaBase() {
+        this.historicoAtendimentos = [];
     }
-    // Adiciona um novo item à fila
-    Fila.prototype.enqueue = function (dados) {
-        var id = criarIdentificador(dados);
-        var novoItem = {
-            id: id,
-            dados: dados,
-            timestamp: new Date()
-        };
-        this.items.push(novoItem);
-        console.log("\u2705 Adicionado \u00E0 fila. ID: ".concat(id));
-        return id;
+    SistemaDeFilaBase.prototype.adicionarAoHistorico = function (atendimento) {
+        this.historicoAtendimentos.unshift(atendimento); // Adiciona no início para exibir os mais recentes primeiro
+        if (this.historicoAtendimentos.length > 50) { // Limita o histórico
+            this.historicoAtendimentos.pop();
+        }
     };
-    // Remove e retorna o primeiro item da fila (FIFO)
-    Fila.prototype.dequeue = function () {
-        var itemRemovido = this.items.shift();
-        if (itemRemovido) {
-            console.log("\u27A1\uFE0F Removido da fila. ID: ".concat(itemRemovido.id));
+    SistemaDeFilaBase.prototype.listarHistorico = function () {
+        var _this = this;
+        console.log("\n--- Histórico de Atendimentos ---");
+        if (this.historicoAtendimentos.length === 0) {
+            console.log("Nenhum atendimento realizado ainda.");
         }
         else {
-            console.log("❌ A fila está vazia.");
+            this.historicoAtendimentos.forEach(function (item) {
+                var infoExtra = _this instanceof SistemaDeFilaClinica ? "Sala: ".concat(item.sala) : "Idade: ".concat(item.idade);
+                console.log("ID: ".concat(item.id, " | CPF: ").concat(item.cpf, " | ").concat(infoExtra, " | Atendido em: ").concat(item.timestamp.toLocaleString()));
+            });
+        }
+        console.log("----------------------------------\n");
+    };
+    return SistemaDeFilaBase;
+}());
+// 4. Classe da Versão Simples (Prioridade por Idade)
+var SistemaDeFilaSimples = /** @class */ (function (_super) {
+    __extends(SistemaDeFilaSimples, _super);
+    function SistemaDeFilaSimples() {
+        var _this = _super !== null && _super.apply(this, arguments) || this;
+        _this.filaPrioritaria = [];
+        _this.filaNormal = [];
+        _this.contadorPrioridade = 0;
+        return _this;
+    }
+    SistemaDeFilaSimples.prototype.enqueue = function (dados) {
+        var id = crypto.createHash('sha256').update(dados.cpf + dados.email + dados.celular).digest('hex');
+        var novoAtendimento = __assign(__assign({}, dados), { id: id, timestamp: new Date() });
+        if (novoAtendimento.idade && novoAtendimento.idade >= 60) {
+            this.filaPrioritaria.push(novoAtendimento);
+            console.log("\u2705 Adicionado \u00E0 Fila PRIORIT\u00C1RIA. ID: ".concat(id));
+        }
+        else {
+            this.filaNormal.push(novoAtendimento);
+            console.log("\u2705 Adicionado \u00E0 Fila NORMAL. ID: ".concat(id));
+        }
+        return id;
+    };
+    SistemaDeFilaSimples.prototype.dequeue = function () {
+        var itemRemovido;
+        var proporcaoPrioridade = 2; // 2 para 1
+        if (this.filaPrioritaria.length > 0 && this.contadorPrioridade < proporcaoPrioridade) {
+            this.contadorPrioridade++;
+            itemRemovido = this.filaPrioritaria.shift();
+            console.log("\u27A1\uFE0F Atendido (Priorit\u00E1rio). ID: ".concat(itemRemovido === null || itemRemovido === void 0 ? void 0 : itemRemovido.id));
+        }
+        else if (this.filaNormal.length > 0) {
+            this.contadorPrioridade = 0;
+            itemRemovido = this.filaNormal.shift();
+            console.log("\u27A1\uFE0F Atendido (Normal). ID: ".concat(itemRemovido === null || itemRemovido === void 0 ? void 0 : itemRemovido.id));
+        }
+        else if (this.filaPrioritaria.length > 0) {
+            this.contadorPrioridade++;
+            itemRemovido = this.filaPrioritaria.shift();
+            console.log("\u27A1\uFE0F Atendido (Priorit\u00E1rio). ID: ".concat(itemRemovido === null || itemRemovido === void 0 ? void 0 : itemRemovido.id));
+        }
+        else {
+            console.log("❌ Nenhuma fila tem itens para atendimento.");
+            return undefined;
+        }
+        if (itemRemovido) {
+            this.adicionarAoHistorico(itemRemovido);
         }
         return itemRemovido;
     };
-    // Retorna o tamanho atual da fila
-    Fila.prototype.tamanho = function () {
-        return this.items.length;
+    SistemaDeFilaSimples.prototype.listar = function () {
+        console.log("\n--- Itens na Fila PRIORITÁRIA (Simples) ---");
+        this.filaPrioritaria.forEach(function (item) { return console.log("ID: ".concat(item.id, " | CPF: ").concat(item.cpf, " | Idade: ").concat(item.idade)); });
+        console.log("\n--- Itens na Fila NORMAL (Simples) ---");
+        this.filaNormal.forEach(function (item) { return console.log("ID: ".concat(item.id, " | CPF: ").concat(item.cpf, " | Idade: ").concat(item.idade)); });
+        console.log("-------------------------------------------\n");
     };
-    // Exibe todos os itens na fila
-    Fila.prototype.listar = function () {
-        console.log("\n--- Itens na Fila ---");
-        if (this.tamanho() === 0) {
-            console.log("A fila está vazia.");
+    return SistemaDeFilaSimples;
+}(SistemaDeFilaBase));
+// 5. Classe da Versão Clínica Médica (Prioridade por Gravidade)
+var SistemaDeFilaClinica = /** @class */ (function (_super) {
+    __extends(SistemaDeFilaClinica, _super);
+    function SistemaDeFilaClinica() {
+        var _this = _super !== null && _super.apply(this, arguments) || this;
+        _this.filaUrgente = [];
+        _this.filaNaoUrgente = [];
+        _this.contadorUrgente = 0;
+        _this.salasDeAtendimento = ['Sala 1', 'Sala 2', 'Sala 3'];
+        return _this;
+    }
+    SistemaDeFilaClinica.prototype.enqueue = function (dados) {
+        var id = crypto.createHash('sha256').update(dados.cpf + dados.email + dados.celular).digest('hex');
+        var novoAtendimento = __assign(__assign({}, dados), { id: id, timestamp: new Date() });
+        if (novoAtendimento.gravidade === 'urgente') {
+            this.filaUrgente.push(novoAtendimento);
+            console.log("\u2705 Adicionado \u00E0 Fila URGENTE. ID: ".concat(id));
         }
         else {
-            this.items.forEach(function (item) {
-                console.log("ID: ".concat(item.id, " | CPF: ").concat(item.dados.cpf, " | Email: ").concat(item.dados.email));
-            });
+            this.filaNaoUrgente.push(novoAtendimento);
+            console.log("\u2705 Adicionado \u00E0 Fila N\u00C3O-URGENTE. ID: ".concat(id));
         }
-        console.log("---------------------\n");
+        return id;
     };
-    return Fila;
-}());
-// 5. Interface Console para interação do usuário
-var fila = new Fila();
+    SistemaDeFilaClinica.prototype.dequeue = function () {
+        var itemRemovido;
+        var proporcaoPrioridade = 5; // 5 para 1
+        var salaAtendimento = this.salasDeAtendimento[Math.floor(Math.random() * this.salasDeAtendimento.length)];
+        if (this.filaUrgente.length > 0 && this.contadorUrgente < proporcaoPrioridade) {
+            this.contadorUrgente++;
+            itemRemovido = this.filaUrgente.shift();
+            if (itemRemovido) {
+                itemRemovido.sala = salaAtendimento;
+            }
+            console.log("\u27A1\uFE0F Atendimento URGENTE chamado para a ".concat(salaAtendimento, ". ID: ").concat(itemRemovido === null || itemRemovido === void 0 ? void 0 : itemRemovido.id));
+        }
+        else if (this.filaNaoUrgente.length > 0) {
+            this.contadorUrgente = 0;
+            itemRemovido = this.filaNaoUrgente.shift();
+            if (itemRemovido) {
+                itemRemovido.sala = salaAtendimento;
+            }
+            console.log("\u27A1\uFE0F Atendimento N\u00C3O-URGENTE chamado para a ".concat(salaAtendimento, ". ID: ").concat(itemRemovido === null || itemRemovido === void 0 ? void 0 : itemRemovido.id));
+        }
+        else if (this.filaUrgente.length > 0) {
+            this.contadorUrgente++;
+            itemRemovido = this.filaUrgente.shift();
+            if (itemRemovido) {
+                itemRemovido.sala = salaAtendimento;
+            }
+            console.log("\u27A1\uFE0F Atendimento URGENTE chamado para a ".concat(salaAtendimento, ". ID: ").concat(itemRemovido === null || itemRemovido === void 0 ? void 0 : itemRemovido.id));
+        }
+        else {
+            console.log("❌ Nenhuma fila tem itens para atendimento.");
+            return undefined;
+        }
+        if (itemRemovido) {
+            this.adicionarAoHistorico(itemRemovido);
+        }
+        return itemRemovido;
+    };
+    SistemaDeFilaClinica.prototype.listar = function () {
+        console.log("\n--- Itens na Fila URGENTE (Clínica) ---");
+        this.filaUrgente.forEach(function (item) { return console.log("ID: ".concat(item.id, " | CPF: ").concat(item.cpf, " | Gravidade: ").concat(item.gravidade)); });
+        console.log("\n--- Itens na Fila NÃO-URGENTE (Clínica) ---");
+        this.filaNaoUrgente.forEach(function (item) { return console.log("ID: ".concat(item.id, " | CPF: ").concat(item.cpf, " | Gravidade: ").concat(item.gravidade)); });
+        console.log("------------------------------------------\n");
+    };
+    return SistemaDeFilaClinica;
+}(SistemaDeFilaBase));
+// 6. Configuração e Menu Principal
 var rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
+var sistema;
+var tipoSistema;
+function escolherSistema() {
+    return __awaiter(this, void 0, void 0, function () {
+        return __generator(this, function (_a) {
+            return [2 /*return*/, new Promise(function (resolve) {
+                    console.log("\n--- Escolha o Sistema ---");
+                    console.log("1. Sistema Simples (Prioridade por Idade)");
+                    console.log("2. Sistema Clínica Médica (Prioridade por Gravidade)");
+                    rl.question('Escolha uma opção: ', function (opcao) {
+                        if (opcao.trim() === '1') {
+                            sistema = new SistemaDeFilaSimples();
+                            tipoSistema = TipoSistema.Simples;
+                            console.log("✅ Sistema Simples selecionado.");
+                            resolve();
+                        }
+                        else if (opcao.trim() === '2') {
+                            sistema = new SistemaDeFilaClinica();
+                            tipoSistema = TipoSistema.ClinicaMedica;
+                            console.log("✅ Sistema Clínica Médica selecionado.");
+                            resolve();
+                        }
+                        else {
+                            console.log("Opção inválida. Por favor, escolha 1 ou 2.");
+                            escolherSistema().then(resolve);
+                        }
+                    });
+                })];
+        });
+    });
+}
 function menu() {
     return __awaiter(this, void 0, void 0, function () {
         var _this = this;
         return __generator(this, function (_a) {
-            console.log("\n--- Sistema de Fila ---");
+            console.log("\n--- Menu Principal ---");
             console.log("1. Adicionar à fila");
             console.log("2. Processar (remover) da fila");
-            console.log("3. Listar todos os itens da fila");
-            console.log("4. Sair");
+            console.log("3. Listar todos os itens nas filas");
+            console.log("4. Listar histórico de atendimentos");
+            console.log("5. Sair");
             rl.question('Escolha uma opção: ', function (opcao) { return __awaiter(_this, void 0, void 0, function () {
                 var _a;
                 return __generator(this, function (_b) {
@@ -117,25 +283,29 @@ function menu() {
                                 case '2': return [3 /*break*/, 3];
                                 case '3': return [3 /*break*/, 4];
                                 case '4': return [3 /*break*/, 5];
+                                case '5': return [3 /*break*/, 6];
                             }
-                            return [3 /*break*/, 6];
+                            return [3 /*break*/, 7];
                         case 1: return [4 /*yield*/, adicionarItem()];
                         case 2:
                             _b.sent();
-                            return [3 /*break*/, 7];
+                            return [3 /*break*/, 8];
                         case 3:
-                            fila.dequeue();
-                            return [3 /*break*/, 7];
+                            sistema.dequeue();
+                            return [3 /*break*/, 8];
                         case 4:
-                            fila.listar();
-                            return [3 /*break*/, 7];
+                            sistema.listar();
+                            return [3 /*break*/, 8];
                         case 5:
+                            sistema.listarHistorico();
+                            return [3 /*break*/, 8];
+                        case 6:
                             rl.close();
                             return [2 /*return*/];
-                        case 6:
-                            console.log("Opção inválida. Tente novamente.");
-                            return [3 /*break*/, 7];
                         case 7:
+                            console.log("Opção inválida. Tente novamente.");
+                            return [3 /*break*/, 8];
+                        case 8:
                             menu();
                             return [2 /*return*/];
                     }
@@ -147,14 +317,14 @@ function menu() {
 }
 function adicionarItem() {
     return __awaiter(this, void 0, void 0, function () {
-        var pergunta, cpf, email, celular, e_1;
+        var pergunta, cpf, email, celular, idadeStr, idade, gravidadeStr, e_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
                     pergunta = function (q) { return new Promise(function (resolve) { return rl.question(q, resolve); }); };
                     _a.label = 1;
                 case 1:
-                    _a.trys.push([1, 5, , 6]);
+                    _a.trys.push([1, 9, , 10]);
                     return [4 /*yield*/, pergunta('Digite o CPF: ')];
                 case 2:
                     cpf = _a.sent();
@@ -164,16 +334,35 @@ function adicionarItem() {
                     return [4 /*yield*/, pergunta('Digite o Celular: ')];
                 case 4:
                     celular = _a.sent();
-                    fila.enqueue({ cpf: cpf, email: email, celular: celular });
-                    return [3 /*break*/, 6];
+                    if (!(tipoSistema === TipoSistema.Simples)) return [3 /*break*/, 6];
+                    return [4 /*yield*/, pergunta('Digite a Idade: ')];
                 case 5:
+                    idadeStr = _a.sent();
+                    idade = parseInt(idadeStr, 10);
+                    if (isNaN(idade)) {
+                        console.log("Idade inválida. Por favor, digite um número.");
+                        return [2 /*return*/];
+                    }
+                    sistema.enqueue({ cpf: cpf, email: email, celular: celular, idade: idade });
+                    return [3 /*break*/, 8];
+                case 6: return [4 /*yield*/, pergunta('Gravidade (urgente/não-urgente): ').then(function (s) { return s.toLowerCase(); })];
+                case 7:
+                    gravidadeStr = _a.sent();
+                    if (gravidadeStr !== 'urgente' && gravidadeStr !== 'não-urgente') {
+                        console.log("Gravidade inválida. Digite 'urgente' ou 'não-urgente'.");
+                        return [2 /*return*/];
+                    }
+                    sistema.enqueue({ cpf: cpf, email: email, celular: celular, gravidade: gravidadeStr });
+                    _a.label = 8;
+                case 8: return [3 /*break*/, 10];
+                case 9:
                     e_1 = _a.sent();
                     console.error('Erro ao adicionar item: ', e_1);
-                    return [3 /*break*/, 6];
-                case 6: return [2 /*return*/];
+                    return [3 /*break*/, 10];
+                case 10: return [2 /*return*/];
             }
         });
     });
 }
-// Inicia o console
-menu();
+// Inicia o sistema
+escolherSistema().then(menu);
